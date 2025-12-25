@@ -17,6 +17,10 @@ const Index = () => {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // New states for displaying response/error explicitly
+  const [responseMessage, setResponseMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -45,42 +49,64 @@ const Index = () => {
     }
 
     setIsLoading(true);
+    setResponseMessage(null);
+    setErrorMessage(null);
     const loadingToastId = showLoading("Criando sua versão de alto nível…");
 
     try {
       // Extract raw base64 data (remove prefix like 'data:image/jpeg;base64,')
       const base64Image = selectedImage.split(',')[1];
       
-      // 1. Call Supabase Edge Function using invoke (handles URL, POST, and Auth header automatically)
+      // 1. Call Supabase Edge Function using invoke
       const { data, error } = await supabase.functions.invoke('generate-rich-image', {
         body: {
-          base64Image: base64Image,
+          image: base64Image, // Updated key to 'image' as requested
           scenario: selectedScenario,
         },
       });
 
       if (error) {
         // Handle network or invocation errors
-        throw new Error(`Erro de invocação da função: ${error.message}`);
+        const detailedError = `Erro de invocação da função (Status: ${error.status || 'N/A'}): ${error.message}`;
+        console.error("Generation failed (Supabase Invoke Error):", error);
+        setErrorMessage(detailedError);
+        throw new Error(detailedError); 
       }
       
       // Check for application-level errors returned in the JSON body from the Edge Function
       if (data && data.error) {
-        throw new Error(data.error);
+        const detailedError = `Erro da Edge Function: ${data.error}`;
+        console.error("Generation failed (Edge Function Error):", data.error);
+        setErrorMessage(detailedError);
+        throw new Error(detailedError); 
       }
 
       if (data && data.imageUrl) {
         setGeneratedImageUrl(data.imageUrl);
         setIsDialogOpen(true);
-        showSuccess(`Função respondeu: ${data.message}`);
+        
+        // Display full JSON response on screen
+        setResponseMessage(JSON.stringify(data, null, 2)); 
+        showSuccess(data.message);
       } else {
-        throw new Error("Resposta inválida da função de geração de imagem.");
+        const detailedError = "Resposta inválida da função de geração de imagem.";
+        setErrorMessage(detailedError);
+        throw new Error(detailedError);
       }
 
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'Erro desconhecido durante a geração.';
-      console.error("Generation failed:", errorMessage);
-      showError(`Falha na geração: ${errorMessage}`);
+      // If errorMessage was set in specific blocks, use it. Otherwise, use generic error.
+      const finalErrorMessage = errorMessage || (e instanceof Error ? e.message : 'Erro desconhecido durante a geração.');
+      
+      // Ensure error message is set for permanent display if it wasn't set in specific error blocks
+      if (!errorMessage) {
+          setErrorMessage(finalErrorMessage);
+          console.error("Generation failed (Catch Block):", e);
+      }
+      
+      // Show toast for immediate feedback
+      showError(`Falha na geração: ${finalErrorMessage}`);
+      
     } finally {
       dismissToast(loadingToastId);
       setIsLoading(false);
@@ -159,6 +185,22 @@ const Index = () => {
           </div>
         </CardContent>
       </Card>
+      
+      {/* Display Response/Error Card */}
+      {(responseMessage || errorMessage) && (
+        <Card className="w-full max-w-2xl mt-6 bg-gray-800 border-gray-700 shadow-lg">
+          <CardHeader>
+            <CardTitle className={`text-xl ${errorMessage ? 'text-red-400' : 'text-green-400'}`}>
+              {errorMessage ? "Detalhes do Erro da Edge Function" : "Resposta da Edge Function (Sucesso)"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className={`whitespace-pre-wrap bg-gray-900 p-3 rounded-md overflow-auto text-sm ${errorMessage ? 'text-red-400' : 'text-gray-300'}`}>
+              {errorMessage || responseMessage}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Generated Image Dialog (Full Screen) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

@@ -55,9 +55,10 @@ serve(async (req) => {
   }
 
   try {
-    const { base64Image, scenario } = await req.json();
+    // Updated to expect 'image' key
+    const { image, scenario } = await req.json();
 
-    if (!base64Image) {
+    if (!image) {
       return new Response(JSON.stringify({ error: "Imagem base64 não fornecida. A imagem do usuário é obrigatória." }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -75,9 +76,8 @@ serve(async (req) => {
       A saída deve ser APENAS a imagem gerada, sem texto adicional.
     `;
 
-    // Assuming the input image is JPEG for simplicity, but ideally, we'd pass the mimeType from the client.
-    // Note: The client sends the base64 string without the prefix, so we assume image/jpeg based on common usage.
-    const imagePart = base64ToGenerativePart(base64Image, "image/jpeg");
+    // Use 'image' variable
+    const imagePart = base64ToGenerativePart(image, "image/jpeg");
 
     // Call Gemini to generate the image
     const response = await ai.models.generateContent({
