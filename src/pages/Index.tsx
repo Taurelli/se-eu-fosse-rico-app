@@ -11,6 +11,11 @@ import { Input } from "@/components/ui/input";
 import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast";
 import { supabase } from "@/integrations/supabase/client";
 
+// Hardcoded values from Supabase context for explicit fetch
+const SUPABASE_URL = "https://hilblatimkqacigwnqbm.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpbGJsYXRpbWtxYWNpZ3ducWJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2ODgwMzAsImV4cCI6MjA4MjI2NDAzMH0.8OP4EugeH2lB25x1eJ9EXE1_2w340glrNlRBOc2rhJ4";
+const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/generate-rich-image`;
+
 const Index = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<string>("urban-ceo");
@@ -18,14 +23,13 @@ const Index = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  // New states for displaying response/error explicitly
+  // States for displaying response/error explicitly
   const [responseMessage, setResponseMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Check file type to set mimeType correctly later, assuming JPEG for now in Edge Function
       if (!file.type.startsWith('image/')) {
         showError("Por favor, envie um arquivo de imagem válido.");
         setSelectedImage(null);
@@ -57,21 +61,36 @@ const Index = () => {
       // Extract raw base64 data (remove prefix like 'data:image/jpeg;base64,')
       const base64Image = selectedImage.split(',')[1];
       
-      // 1. Call Supabase Edge Function using invoke
-      const { data, error } = await supabase.functions.invoke('generate-rich-image', {
-        body: {
-          image: base64Image, // Updated key to 'image' as requested
-          scenario: selectedScenario,
+      const response = await fetch(EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
+        body: JSON.stringify({
+          image: base64Image,
+          scenario: selectedScenario,
+        }),
       });
 
-      if (error) {
-        // Handle network or invocation errors
-        const detailedError = `Erro de invocação da função (Status: ${error.status || 'N/A'}): ${error.message}`;
-        console.error("Generation failed (Supabase Invoke Error):", error);
+      // Check for network/HTTP errors (e.g., 404, 500, or CORS failure)
+      if (!response.ok) {
+        let errorBody = {};
+        try {
+          errorBody = await response.json();
+        } catch (e) {
+          // If response is not JSON (e.g., HTML error page or CORS issue)
+          const text = await response.text();
+          errorBody = { message: text.substring(0, 200) + '...', raw_response: text };
+        }
+        
+        const detailedError = `Erro HTTP ${response.status} (${response.statusText}): ${JSON.stringify(errorBody, null, 2)}`;
+        console.error("Generation failed (HTTP Error):", detailedError);
         setErrorMessage(detailedError);
-        throw new Error(detailedError); 
+        throw new Error(`Falha na chamada da função: Status ${response.status}`);
       }
+
+      const data = await response.json();
       
       // Check for application-level errors returned in the JSON body from the Edge Function
       if (data && data.error) {
