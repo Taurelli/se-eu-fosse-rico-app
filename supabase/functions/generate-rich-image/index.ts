@@ -48,7 +48,7 @@ serve(async (req) => {
   }
 
   if (!GEMINI_API_KEY) {
-    return new Response(JSON.stringify({ error: "GEMINI_API_KEY não configurada." }), {
+    return new Response(JSON.stringify({ error: "GEMINI_API_KEY não configurada. Por favor, defina o segredo no Supabase." }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -58,7 +58,7 @@ serve(async (req) => {
     const { base64Image, scenario } = await req.json();
 
     if (!base64Image) {
-      return new Response(JSON.stringify({ error: "Imagem base64 não fornecida." }), {
+      return new Response(JSON.stringify({ error: "Imagem base64 não fornecida. A imagem do usuário é obrigatória." }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -76,6 +76,7 @@ serve(async (req) => {
     `;
 
     // Assuming the input image is JPEG for simplicity, but ideally, we'd pass the mimeType from the client.
+    // Note: The client sends the base64 string without the prefix, so we assume image/jpeg based on common usage.
     const imagePart = base64ToGenerativePart(base64Image, "image/jpeg");
 
     // Call Gemini to generate the image
@@ -89,7 +90,7 @@ serve(async (req) => {
     
     if (!generatedImageBase64) {
       console.error("Gemini did not return a valid image part:", response);
-      return new Response(JSON.stringify({ error: "Falha ao gerar imagem. Tente novamente." }), {
+      return new Response(JSON.stringify({ error: "Falha ao gerar imagem. O modelo não retornou uma imagem válida." }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -108,7 +109,7 @@ serve(async (req) => {
 
     if (uploadError) {
       console.error("Storage Upload Error:", uploadError);
-      throw new Error(`Falha ao salvar imagem: ${uploadError.message}`);
+      throw new Error(`Falha ao salvar imagem no Storage: ${uploadError.message}`);
     }
 
     // Get the public URL
