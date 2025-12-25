@@ -45,7 +45,6 @@ const Index = () => {
     }
 
     setIsLoading(true);
-    // Updated loading message as requested
     const loadingToastId = showLoading("Criando sua versão de alto nível…");
 
     try {
@@ -64,17 +63,20 @@ const Index = () => {
         throw new Error(error.message);
       }
       
+      // Log the full response for validation
+      console.log("Edge Function Response:", data);
+
       if (data && data.imageUrl) {
         setGeneratedImageUrl(data.imageUrl);
         setIsDialogOpen(true);
-        showSuccess("Imagem gerada com sucesso!");
+        showSuccess(`Função respondeu: ${data.message}`);
       } else {
         throw new Error("Resposta inválida da função de geração de imagem.");
       }
 
     } catch (e) {
       console.error("Generation failed:", e);
-      showError(`Falha ao gerar imagem: ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
+      showError(`Falha na comunicação com a função: ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
     } finally {
       dismissToast(loadingToastId);
       setIsLoading(false);
