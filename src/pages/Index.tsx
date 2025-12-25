@@ -51,7 +51,7 @@ const Index = () => {
       // Extract raw base64 data (remove prefix like 'data:image/jpeg;base64,')
       const base64Image = selectedImage.split(',')[1];
       
-      // 1. Call Supabase Edge Function
+      // 1. Call Supabase Edge Function using invoke (handles URL, POST, and Auth header automatically)
       const { data, error } = await supabase.functions.invoke('generate-rich-image', {
         body: {
           base64Image: base64Image,
@@ -60,11 +60,14 @@ const Index = () => {
       });
 
       if (error) {
-        throw new Error(error.message);
+        // Handle network or invocation errors
+        throw new Error(`Erro de invocação da função: ${error.message}`);
       }
       
-      // Log the full response for validation
-      console.log("Edge Function Response:", data);
+      // Check for application-level errors returned in the JSON body from the Edge Function
+      if (data && data.error) {
+        throw new Error(data.error);
+      }
 
       if (data && data.imageUrl) {
         setGeneratedImageUrl(data.imageUrl);
@@ -75,8 +78,9 @@ const Index = () => {
       }
 
     } catch (e) {
-      console.error("Generation failed:", e);
-      showError(`Falha na comunicação com a função: ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
+      const errorMessage = e instanceof Error ? e.message : 'Erro desconhecido durante a geração.';
+      console.error("Generation failed:", errorMessage);
+      showError(`Falha na geração: ${errorMessage}`);
     } finally {
       dismissToast(loadingToastId);
       setIsLoading(false);
