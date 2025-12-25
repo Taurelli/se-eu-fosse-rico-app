@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast"; // Importando as funções de toast
+import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -20,6 +21,13 @@ const Index = () => {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Check file type to set mimeType correctly later, assuming JPEG for now in Edge Function
+      if (!file.type.startsWith('image/')) {
+        showError("Por favor, envie um arquivo de imagem válido.");
+        setSelectedImage(null);
+        return;
+      }
+      
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result as string);
@@ -30,39 +38,47 @@ const Index = () => {
     }
   };
 
-  const generateImage = () => {
+  const generateImage = async () => {
     if (!selectedImage) {
       showError("Por favor, envie uma foto primeiro.");
       return;
     }
 
     setIsLoading(true);
-    const loadingToastId = showLoading("Gerando sua imagem de rico...");
+    // Updated loading message as requested
+    const loadingToastId = showLoading("Criando sua versão de alto nível…");
 
-    // Simulate image generation based on scenario
-    let imageUrl = "";
-    switch (selectedScenario) {
-      case "urban-ceo":
-        imageUrl = "https://picsum.photos/seed/urban-ceo/800/600"; // Placeholder para CEO Urbano
-        break;
-      case "silent-elite":
-        imageUrl = "https://picsum.photos/seed/silent-elite/800/600"; // Placeholder para Elite Silenciosa
-        break;
-      case "international-freedom":
-        imageUrl = "https://picsum.photos/seed/international-freedom/800/600"; // Placeholder para Liberdade Internacional
-        break;
-      default:
-        imageUrl = "https://picsum.photos/seed/default/800/600";
-    }
+    try {
+      // Extract raw base64 data (remove prefix like 'data:image/jpeg;base64,')
+      const base64Image = selectedImage.split(',')[1];
+      
+      // 1. Call Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('generate-rich-image', {
+        body: {
+          base64Image: base64Image,
+          scenario: selectedScenario,
+        },
+      });
 
-    // Simulate API call delay
-    setTimeout(() => {
-      setGeneratedImageUrl(imageUrl);
-      setIsDialogOpen(true);
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      if (data && data.imageUrl) {
+        setGeneratedImageUrl(data.imageUrl);
+        setIsDialogOpen(true);
+        showSuccess("Imagem gerada com sucesso!");
+      } else {
+        throw new Error("Resposta inválida da função de geração de imagem.");
+      }
+
+    } catch (e) {
+      console.error("Generation failed:", e);
+      showError(`Falha ao gerar imagem: ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
+    } finally {
       dismissToast(loadingToastId);
-      showSuccess("Imagem gerada com sucesso!");
       setIsLoading(false);
-    }, 2000); // 2 seconds delay
+    }
   };
 
   return (
@@ -129,7 +145,7 @@ const Index = () => {
           <div className="text-center">
             <Button
               onClick={generateImage}
-              disabled={isLoading}
+              disabled={isLoading || !selectedImage}
               className="w-full md:w-auto px-8 py-3 text-lg font-bold bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-full shadow-lg transition-all duration-300 transform hover:scale-105"
             >
               {isLoading ? "Gerando..." : "Gerar Imagem"}
@@ -138,9 +154,9 @@ const Index = () => {
         </CardContent>
       </Card>
 
-      {/* Generated Image Dialog */}
+      {/* Generated Image Dialog (Full Screen) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl w-full p-0 border-none bg-transparent">
+        <DialogContent className="max-w-full w-full h-full p-0 border-none bg-transparent flex items-center justify-center">
           <DialogHeader className="sr-only">
             <DialogTitle>Sua Imagem de Rico</DialogTitle>
           </DialogHeader>
