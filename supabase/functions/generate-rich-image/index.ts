@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -43,8 +44,12 @@ function base64ToGenerativePart(base64Data: string, mimeType: string) {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 200, 
+      headers: corsHeaders 
+    });
   }
 
   if (!GEMINI_API_KEY) {
@@ -55,7 +60,6 @@ serve(async (req) => {
   }
 
   try {
-    // Updated to expect 'image' key
     const { image, scenario } = await req.json();
 
     if (!image) {
@@ -109,7 +113,10 @@ serve(async (req) => {
 
     if (uploadError) {
       console.error("Storage Upload Error:", uploadError);
-      throw new Error(`Falha ao salvar imagem no Storage: ${uploadError.message}`);
+      return new Response(JSON.stringify({ error: `Falha ao salvar imagem no Storage: ${uploadError.message}` }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Get the public URL
