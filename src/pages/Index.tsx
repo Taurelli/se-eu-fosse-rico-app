@@ -30,6 +30,39 @@ const Index = () => {
   const [responseMessage, setResponseMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+
+
+const handleGenerateImage = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    const { data, error } = await supabase.functions.invoke(
+      "generate-rich-image",
+      {
+        body: {
+          imageBase64,
+          scenario,
+        },
+      }
+    );
+
+    if (error) {
+      console.error(error);
+      setError(error.message);
+      return;
+    }
+
+    setGeneratedImage(data.image || data);
+  } catch (err: any) {
+    console.error(err);
+    setError("Erro ao chamar a função");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
